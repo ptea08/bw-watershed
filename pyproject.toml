@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bootstrapped-watershed"
+version = "0.1.0"
+description = "Few-shot instance segmentation for ZooScan plankton imagery"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Pratham Tatraiya", email = "pratham.tatraiya@uni-rostock.de" },
+    { name = "Torben Globisch" },
+    { name = "Vivian Fischbach" },
+    { name = "Stefan Oehmcke", email = "stefan.oehmcke@uni-rostock.de" },
+]
+keywords = ["instance-segmentation", "plankton", "zooscan", "few-shot", "dinov3"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+dynamic = ["dependencies"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "ruff>=0.4"]
+
+[project.urls]
+Homepage = "https://ptea08.github.io/bw-watershed/"
+Repository = "https://github.com/ptea08/bw-watershed"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+# Tests import the package straight from src/, so `pytest` works in a fresh
+# clone without `pip install -e .` first.
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100

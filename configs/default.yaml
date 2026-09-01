@@ -1,0 +1,246 @@
+# Bootstrapped Watershed — default configuration.
+#
+# This file holds HYPERPARAMETERS ONLY. Paths are never configured here; they
+# are passed on the command line (see scripts/), so a config can be shared
+# between machines without editing. Nothing under src/ hardcodes a value that
+# appears in this file.
+#
+# Values marked [paper] are quoted in the publication and are pinned by
+# tests/test_config.py. Changing one of those invalidates the reported results
+# table, and the test suite will say so.
+
+seed: 42
+device: cuda                       # falls back to cpu automatically if unavailable
+amp: true                          # mixed precision; ignored on cpu
+
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
+data:
+  crop_size: 512                   # [paper] training / pseudo-label crop size (px)
+
+  # Annotation encoding. Masks are RGB; each pixel takes the class of its
+  # dominant channel, and must clear `min_channel` to count at all. Ties and
+  # dark/ambiguous pixels get `ignore_index` and contribute nothing to any loss.
+  mask_encoding:
+    background: red
+    foreground: green              # organism interiors
+    boundary: blue                 # organism boundaries
+    min_channel: 50                # dominant channel must exceed this
+
+  # ORDER IS LOAD-BEARING: this is the integer class index order used
+  # everywhere — 0 background, 1 foreground, 2 boundary. Loss weights below
+  # are keyed by NAME, not position, and are assembled into a tensor in this
+  # order, so the two can never silently drift apart.
+  class_names: [background, foreground, boundary]
+  num_classes: 3
+  ignore_index: 255
+
+  # [paper] Sec 3.1. Cross-entropy weights, used unchanged by BOTH the stage-1
+  # classifier and the stage-2 segmenter — hence their home here rather than
+  # under either stage. Boundary is heavily upweighted: boundary pixels are a
+  # small fraction of the image but carry nearly all of the instance-separation
+  # signal, and a segmenter that ignores them cannot split touching organisms.
+  class_weights:
+    background: 1.0
+    foreground: 1.5
+    boundary: 8.0
+
+  # ImageNet statistics — the DINOv3 checkpoints expect this normalisation.
+  normalization:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+# ---------------------------------------------------------------------------
+# Stage 1 — bootstrap: pixel classifier on frozen ConvNeXt features + confidence
+#                      selection of the pseudo-labeled crops
+# ---------------------------------------------------------------------------
+stage1_bootstrap:
+  # How many crops you annotated is read from `<data-root>/annotated/`, and how
+  # many candidates exist is read from `<data-root>/unlabeled/`. Neither is
+  # configured here — the paper's counts (N_ann = 3, N_boot = 82) described one
+  # dataset and do not transfer. See docs/TUNING.md.
+
+  # [paper] Sec 3.1: "a frozen DINOv3-ConvNeXt-Small backbone provides a
+  # 384-dimensional feature vector for each spatial position". That is stage3
+  # of the ConvNeXt hierarchy, which is 384 channels at stride 16 — the same
+  # checkpoint stage 2 uses, just read at a single scale instead of four.
+  #
+  # Stage 1 classifies those descriptors at their native stride-16 resolution.
+  # Nothing is upsampled before classification; the predicted grid is expanded
+  # to pixels with nearest-neighbour afterwards, so no interpolated feature
+  # values are ever fed to the classifier.
+  backbone:
+    name: facebook/dinov3-convnext-small-pretrain-lvd1689m
+    out_features: [stage3]         # 384-d @ stride 16
+    stride: 16
+    feature_dim: 384               # [paper]
+    frozen: true                   # [paper]
+    requires_hf_token: true        # GATED on the Hub; export HF_TOKEN
+
+  classifier:
+    type: mlp_shallow              # mlp_shallow | mlp_deep | random_forest
+    hidden_dim: 128                # [paper] 384 -> 128 -> 3, ~50k params
+    layer_norm: true
+    activation: relu
+    deep_hidden_dims: [256, 128]   # MLP-D ablation only
+    deep_dropout: 0.1
+
+  optim:
+    epochs: 200
+    lr: 1.0e-3
+    batch_size: 512                # patch tokens, not images
+    optimizer: adamw
+    weight_decay: 1.0e-4
+    scheduler: cosine_annealing    # no warm restarts at this stage
+    eta_min: 1.0e-6
+
+  selection:
+    score: mean_max_probability    # per-crop mean of the max class probability
+
+    # Crops scoring above this are kept as pseudo-labels. This is the real
+    # mechanism: the paper's N_boot = 82 is how many of our candidates cleared
+    # the cut, an OUTCOME rather than a setting, so there is no default that
+    # transfers to another dataset.
+    #
+    # `null` keeps every candidate and warns. That is a deliberately poor
+    # default — it lets stage 1 run end to end so you can inspect
+    # `ranking.csv`, find the knee in the confidence curve and set a real
+    # threshold. Do not train on the result of a `null` run.
+    confidence_threshold: null
+
+    # Prior multipliers applied to the softmax before argmax and before the
+    # confidence is read off. They bias the pseudo-labels towards organism
+    # pixels, which are heavily outnumbered by background in a ZooScan tile.
+    # Carried over unchanged from the random-forest bootstrapper so that the
+    # MLP-S / MLP-D / RF arms of Table 1 remain directly comparable.
+    class_priors:
+      foreground: 7.0
+      boundary: 1.5
+    median_blur: 5                 # applied to the RGB pseudo-label mask
+
+  random_forest:                   # RF-bootstrap ablation only
+    n_estimators: 100
+    max_depth: 20
+
+# ---------------------------------------------------------------------------
+# Stage 2 — semantic segmenter: U-Net decoder on the frozen feature hierarchy
+# ---------------------------------------------------------------------------
+stage2_segmenter:
+  # Same checkpoint as stage 1, read at all four spatial stages (strides
+  # 4/8/16/32) so they plug straight into the U-Net skip connections. Stage 1
+  # takes stage3 of this same hierarchy.
+  backbone:
+    name: facebook/dinov3-convnext-small-pretrain-lvd1689m
+    out_features: [stage1, stage2, stage3, stage4]
+    frozen: true                   # [paper] only decoder parameters update
+    requires_hf_token: true
+
+  decoder:
+    channels: [256, 128, 64, 32]   # coarse -> fine, one per decoder stage
+    dropout: 0.1
+    stride: 32                     # input must be padded to a multiple of this
+
+  loss:
+    tversky:
+      alpha: 0.7                   # [paper] penalises false negatives
+      beta: 0.3                    # [paper]
+      smooth: 1.0e-6
+    cross_entropy:
+      # total = tversky + ce_weight * weighted_cross_entropy
+      # The per-class weights are `data.class_weights`.
+      ce_weight: 0.4
+
+  optim:
+    epochs: 80                     # [paper]
+    lr: 1.0e-3
+    batch_size: 4
+    optimizer: adamw               # [paper]
+    weight_decay: 1.0e-4
+    scheduler: cosine_annealing_warm_restarts   # [paper]
+    t_0: 20
+    t_mult: 2
+    eta_min: 1.0e-6
+    val_split: 0.2
+    # Checkpoint on boundary IoU, not mIoU: boundary is the hardest class and
+    # the only one that determines whether touching organisms can be split.
+    checkpoint_metric: boundary_iou
+
+  augmentation:
+    hflip: 0.5
+    vflip: 0.5
+    rot90: 0.5
+    shift_scale_rotate:
+      p: 0.7
+      shift_limit: 0.1
+      scale_limit: 0.15
+      rotate_limit: 30
+    elastic:
+      p: 0.2
+      alpha: 50
+      sigma: 7
+    brightness_contrast:
+      p: 0.5
+      brightness_limit: 0.2
+      contrast_limit: 0.2
+    gauss_noise: 0.2
+
+# ---------------------------------------------------------------------------
+# Stage 3 — full-scan inference + instance extraction
+# ---------------------------------------------------------------------------
+stage3_instances:
+  # A full scan is ~15000 x 25000 px and will not fit in GPU memory.
+  tiling:
+    tile_size: 512                 # [paper] must be a multiple of decoder.stride
+    overlap: 128                   # [paper]
+    blend: gaussian                # centre predictions weighted above edges
+    # Sigma of the blending window, in units of half the tile. 0.5 puts the
+    # 1-sigma contour a quarter of a tile from the centre, so a pixel's
+    # contribution has decayed substantially by the time it reaches the seam.
+    blend_sigma: 0.5
+
+  # Semantic map -> instances, in the order the paper gives them.
+  extraction:
+    median_blur: 5                 # despeckle the argmax RGB map first
+
+    # 1. remove predicted boundary pixels from the foreground
+    remove_boundary: true
+
+    # 2. pinch-point severing: cut thin necks the network left connected
+    pinch_severing:
+      dt_min: 0                    # [paper] 0 < D_L2(M_g) < dt_max
+      dt_max: 12                   # [paper] px
+      radius: 8                    # [paper] px search radius
+      min_sides: 2                 # [paper] boundary preds on >= 2 of 4 sides
+      # The cut is dilated by this before being applied, widening it from
+      # ~1 px to ~3 px. Not specified in the paper; see extraction.py.
+      sever_dilation: 3
+
+    # 3. morphological cleanup
+    closing_kernel: 5              # [paper] 5x5 close on the severed mask
+    boundary_dilation: [3, 5]      # [paper] 3x3 open then 5x5 dilate -> wall
+
+    # 4. distance-transform watershed
+    watershed:
+      smoothing_kernel: 9          # [paper] 9x9 Gaussian on the distance transform
+      marker_threshold: 5          # [paper] px; markers at local maxima above this
+      peak_kernel: 9               # neighbourhood a local maximum must dominate
+      background_dilation: 5       # grows the mask to mark the unknown band
+
+    # 5. cleanup
+    min_instance_area: 150         # [paper] px^2
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+eval:
+  iou_threshold: 0.5               # [paper] one-to-one matching
+  matching: hungarian              # optimal assignment maximising total IoU
+  metrics: [pq, sq, rq, precision, recall, osr]
+  aggregate: macro                 # [paper] macro-averaged across the test crops
+  # Evaluation is class-agnostic: every annotated shape is one ground-truth
+  # object regardless of its label.
+  #
+  # OSR = N_pred / N_gt; ideal is 1. Values > 1 indicate over-segmentation.
+  # Interpret OSR together with precision and recall — equal counts can hide
+  # simultaneous false positives and false negatives.

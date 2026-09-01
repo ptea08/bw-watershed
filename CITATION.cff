@@ -1,0 +1,56 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the paper below."
+title: "Bootstrapped Watershed"
+abstract: >-
+  Few-shot instance segmentation for ZooScan plankton imagery. Frozen DINOv3
+  features train a shallow MLP on three annotated crops, which pseudo-labels
+  further crops to supervise a U-Net segmenter; watershed post-processing
+  recovers individual organisms.
+type: software
+version: "0.1.0"
+license: Apache-2.0
+repository-code: "https://github.com/ptea08/bw-watershed"
+url: "https://ptea08.github.io/bw-watershed/"
+keywords:
+  - instance segmentation
+  - few-shot learning
+  - plankton imaging
+  - ZooScan
+  - marine vision
+authors:
+  - given-names: Pratham
+    family-names: Tatraiya
+    affiliation: "University of Rostock, Germany"
+    email: pratham.tatraiya@uni-rostock.de
+    orcid: "https://orcid.org/0009-0005-9657-9161"
+  - given-names: Torben
+    family-names: Globisch
+    affiliation: "University of Rostock, Germany"
+    orcid: "https://orcid.org/0009-0006-9657-3517"
+  - given-names: Vivian
+    family-names: Fischbach
+    affiliation: "University of Rostock, Germany"
+    orcid: "https://orcid.org/0000-0002-9902-9721"
+  - given-names: Stefan
+    family-names: Oehmcke
+    affiliation: "University of Rostock, Germany"
+    email: stefan.oehmcke@uni-rostock.de
+    orcid: "https://orcid.org/0000-0002-0240-1559"
+preferred-citation:
+  type: conference-paper
+  title: "Bootstrapped Watershed: Towards Few-Shot Instance ZooScan Segmentation"
+  year: 2026
+  collection-title: "European Conference on Computer Vision (ECCV) Workshops — Marine Vision Workshop"
+  authors:
+    - given-names: Pratham
+      family-names: Tatraiya
+      orcid: "https://orcid.org/0009-0005-9657-9161"
+    - given-names: Torben
+      family-names: Globisch
+      orcid: "https://orcid.org/0009-0006-9657-3517"
+    - given-names: Vivian
+      family-names: Fischbach
+      orcid: "https://orcid.org/0000-0002-9902-9721"
+    - given-names: Stefan
+      family-names: Oehmcke
+      orcid: "https://orcid.org/0000-0002-0240-1559"

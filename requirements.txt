@@ -1,0 +1,34 @@
+# Core pipeline. Pin exact versions once the cluster environment is confirmed.
+#
+# DINOv3 support landed in transformers 4.56 — earlier versions will fail to
+# load the ConvNeXt-Small checkpoint.
+transformers>=4.56
+torch>=2.4                  # torch.amp.GradScaler moved here in 2.4
+torchvision>=0.19
+huggingface-hub>=0.34
+
+numpy>=1.26
+scipy>=1.11
+scikit-image>=0.22          # watershed, distance transform, morphology
+opencv-python-headless>=4.9
+Pillow>=10.0
+
+# Albumentations 2.0 removed ShiftScaleRotate and changed the GaussNoise and
+# ElasticTransform signatures, all of which data/dataset.py uses. Staying on
+# 1.x also keeps the augmentation identical to the one behind the paper's
+# numbers, so do not relax this bound without re-running the results.
+albumentations>=1.4,<2.0    # stage-2 training augmentation
+scikit-learn>=1.4           # random-forest bootstrap ablation
+PyYAML>=6.0
+tqdm>=4.66
+
+# Figures / notebooks
+matplotlib>=3.8
+jupyter>=1.0
+
+# Baselines are heavy and mutually conflicting — install only what you need.
+# See baselines/README.md for isolated environment instructions.
+#   cellpose>=3.0
+#   stardist>=0.9
+#   tensorflow>=2.15         # required by stardist
+#   detectron2               # required by Mask2Former; install from source

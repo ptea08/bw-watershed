@@ -1,0 +1,48 @@
+# Smoke-test overlay — proves the pipeline runs, not that it works.
+#
+#   python scripts/bootstrap.py --config configs/smoke.yaml \
+#       --data-root data/smoke --output-dir outputs/smoke/bootstrap
+#
+# Every number here is chosen to finish quickly, so the masks, checkpoints and
+# metrics this produces are meaningless. Never report them, and never carry a
+# checkpoint trained under this config into a real run.
+#
+# This is an overlay: it is merged over configs/default.yaml, so anything not
+# named below keeps its published value. That is deliberate — the point of a
+# smoke test is to exercise the real code paths, so only cost is reduced here,
+# never behaviour. See docs/TUNING.md.
+
+# Mixed precision is a failure mode with nothing to do with your wiring, and it
+# is the first thing to blame a crash on. Off while shaking the pipeline out.
+amp: false
+
+stage1_bootstrap:
+  optim:
+    epochs: 3                      # 200 in a real run
+
+  selection:
+    # Keep every candidate. After 3 epochs the classifier is not good enough
+    # for a threshold to mean anything, and a threshold that rejected
+    # everything would leave stage 2 with no data and mask a real failure as an
+    # empty-directory error. bootstrap.py will warn — expected here.
+    confidence_threshold: null
+
+stage2_segmenter:
+  optim:
+    epochs: 2                      # 80 in a real run
+
+    # Small enough that a handful of crops still forms more than one batch.
+    # A batch larger than the dataset silently degenerates to one step per
+    # epoch, which hides ordering and accumulation bugs.
+    batch_size: 2
+
+    # Checkpointing is on boundary IoU, which a 2-epoch run will probably never
+    # improve — in that case only `last.pt` is written and the script says so.
+    # Resume and inference smoke tests should therefore use `last.pt`.
+
+# Stage 3 is deliberately absent from this overlay. Extraction keeps its
+# published settings, because those are the ones most likely to be wrong for a
+# new dataset and a smoke run is exactly when you want to see what they do to
+# your imagery. If extraction returns zero instances that is a finding, not a
+# crash — start with min_instance_area (150 px^2, discards anything smaller
+# without an error) and read docs/TUNING.md section 2.

@@ -1,0 +1,63 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.so
+.Python
+
+# Environments
+.venv/
+venv/
+env/
+.env
+.envrc
+
+# Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+.virtual_documents/
+
+# Testing / linting
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- Project specific ---------------------------------------------------
+
+# Scans and derived data are NOT redistributable (Thünen Institute), and no
+# imagery ships with this repository. Only the layout documentation is tracked.
+data/*
+!data/README.md
+
+# Model weights ship as GitHub Release assets, never in git history.
+checkpoints/
+weights/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Run outputs
+outputs/
+runs/
+logs/
+wandb/
+mlruns/
+predictions/
+*.log
+
+# Large intermediates
+*.npy
+*.npz
+*.tif
+*.tiff
+
+# OS
+.DS_Store
+Thumbs.db
