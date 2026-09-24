@@ -2,7 +2,7 @@
 
 **Few-shot instance segmentation for ZooScan plankton imagery — trained from three annotated crops.**
 
-[![Paper](https://img.shields.io/badge/Paper-Marine%20Vision%20%40%20ECCV%202026-blue)](#citation)
+[![Paper](https://img.shields.io/badge/Paper-Marine%20Vision%20%40%20ECCV%202026-blue)](https://openreview.net/forum?id=u3dIljiYrj)
 [![Poster](https://img.shields.io/badge/Poster-PDF-orange)](assets/poster.pdf)
 [![Project page](https://img.shields.io/badge/Project_page-ptea08.github.io-lightgrey)](https://ptea08.github.io/bw-watershed/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green.svg)](LICENSE)
@@ -147,9 +147,10 @@ Masks are RGB: **red** = background, **green** = organism interior, **blue** = b
 ```bibtex
 @inproceedings{tatraiya2026bootstrapped,
   title     = {Bootstrapped Watershed: Towards Few-Shot Instance ZooScan Segmentation},
-  author    = {Tatraiya, Pratham and Globisch, Torben and Fischbach, Vivian and Oehmcke, Stefan},
-  booktitle = {European Conference on Computer Vision (ECCV) Workshops --- Marine Vision Workshop},
-  year      = {2026}
+  author    = {Pratham Tatraiya and Torben Globisch and Vivian Fischbach and Stefan Oehmcke},
+  booktitle = {2nd Workshop on Marine Vision},
+  year      = {2026},
+  url       = {https://openreview.net/forum?id=u3dIljiYrj}
 }
 ```
 
